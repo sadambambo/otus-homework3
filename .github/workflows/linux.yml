@@ -1,0 +1,60 @@
+name: Linux
+
+on:
+  push:
+
+env:
+  BUILD_TYPE: Debug
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install tools
+      run: sudo apt install cmake
+
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Pack
+      run: cpack --config ${{github.workspace}}/build/CPackConfig.cmake
+
+    - name: Upload
+      uses: actions/upload-artifact@v4
+      with:
+        path: ${{github.workspace}}/*.deb
+        if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-20.04
+    needs: build
+    steps:
+    - name: Download
+      uses: actions/download-artifact@v4
+      with:
+        merge-multiple: true
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.run_number }}
+        release_name: Release ${{ github.run_number }}
+        draft: false
+        prerelease: false
+    - name: Upload Release Asset
+      id: upload-release-asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./allocator-0.0.${{ github.run_number }}-Linux.deb
+        asset_name: allocator-0.0.${{ github.run_number }}-Linux.deb
+        asset_content_type: application/vnd.debian.binary-package
